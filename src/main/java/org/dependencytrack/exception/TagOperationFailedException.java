@@ -16,28 +16,29 @@
  * SPDX-License-Identifier: Apache-2.0
  * Copyright (c) OWASP Foundation. All Rights Reserved.
  */
-package org.dependencytrack.resources.v1.exception;
+package org.dependencytrack.exception;
 
-import alpine.persistence.NotSortableException;
-import org.dependencytrack.resources.v1.problems.ProblemDetails;
-
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.ext.ExceptionMapper;
-import jakarta.ws.rs.ext.Provider;
+import java.util.Map;
 
 /**
  * @since 4.12.0
  */
-@Provider
-public class NotSortableExceptionMapper implements ExceptionMapper<NotSortableException> {
+public class TagOperationFailedException extends IllegalStateException {
 
-    @Override
-    public Response toResponse(final NotSortableException exception) {
-        final var problemDetails = new ProblemDetails();
-        problemDetails.setStatus(400);
-        problemDetails.setTitle("Field not sortable");
-        problemDetails.setDetail(exception.getMessage());
-        return problemDetails.toResponse();
+    private final Map<String, String> errorByTagName;
+
+    private TagOperationFailedException(final String message, final Map<String, String> errorByTagName) {
+        super(message);
+        this.errorByTagName = errorByTagName;
+    }
+
+    public static TagOperationFailedException forDeletion(final Map<String, String> errorByTagName) {
+        return new TagOperationFailedException("The tag(s) %s could not be deleted"
+                .formatted(String.join(",", errorByTagName.keySet())), errorByTagName);
+    }
+
+    public Map<String, String> getErrorByTagName() {
+        return errorByTagName;
     }
 
 }

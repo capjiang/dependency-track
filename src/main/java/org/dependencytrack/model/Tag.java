@@ -66,7 +66,19 @@ public class Tag implements Serializable {
     @Persistent
     @JsonIgnore
     @Order(extensions = @Extension(vendorName = "datanucleus", key = "list-ordering", value = "name ASC"))
+    private List<Policy> policies;
+
+    @Persistent
+    @JsonIgnore
+    @Order(extensions = @Extension(vendorName = "datanucleus", key = "list-ordering", value = "name ASC"))
     private List<Project> projects;
+
+    public Tag() {
+    }
+
+    public Tag(final String name) {
+        this.name = name;
+    }
 
     public long getId() {
         return id;
@@ -82,6 +94,14 @@ public class Tag implements Serializable {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public List<Policy> getPolicies() {
+        return policies;
+    }
+
+    public void setPolicies(List<Policy> policies) {
+        this.policies = policies;
     }
 
     public List<Project> getProjects() {

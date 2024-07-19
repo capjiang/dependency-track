@@ -18,26 +18,22 @@
  */
 package org.dependencytrack.resources.v1.exception;
 
-import alpine.persistence.NotSortableException;
 import org.dependencytrack.resources.v1.problems.ProblemDetails;
 
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
+import java.util.NoSuchElementException;
 
 /**
  * @since 4.12.0
  */
 @Provider
-public class NotSortableExceptionMapper implements ExceptionMapper<NotSortableException> {
+public class NoSuchElementExceptionMapper implements ExceptionMapper<NoSuchElementException> {
 
     @Override
-    public Response toResponse(final NotSortableException exception) {
-        final var problemDetails = new ProblemDetails();
-        problemDetails.setStatus(400);
-        problemDetails.setTitle("Field not sortable");
-        problemDetails.setDetail(exception.getMessage());
-        return problemDetails.toResponse();
+    public Response toResponse(final NoSuchElementException exception) {
+        return new ProblemDetails(404, "Resource does not exist", exception.getMessage()).toResponse();
     }
 
 }

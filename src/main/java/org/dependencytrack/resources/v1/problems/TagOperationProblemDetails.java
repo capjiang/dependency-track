@@ -16,28 +16,26 @@
  * SPDX-License-Identifier: Apache-2.0
  * Copyright (c) OWASP Foundation. All Rights Reserved.
  */
-package org.dependencytrack.resources.v1.exception;
+package org.dependencytrack.resources.v1.problems;
 
-import alpine.persistence.NotSortableException;
-import org.dependencytrack.resources.v1.problems.ProblemDetails;
+import io.swagger.v3.oas.annotations.media.Schema;
 
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.ext.ExceptionMapper;
-import jakarta.ws.rs.ext.Provider;
+import java.util.Map;
 
 /**
  * @since 4.12.0
  */
-@Provider
-public class NotSortableExceptionMapper implements ExceptionMapper<NotSortableException> {
+public class TagOperationProblemDetails extends ProblemDetails {
 
-    @Override
-    public Response toResponse(final NotSortableException exception) {
-        final var problemDetails = new ProblemDetails();
-        problemDetails.setStatus(400);
-        problemDetails.setTitle("Field not sortable");
-        problemDetails.setDetail(exception.getMessage());
-        return problemDetails.toResponse();
+    @Schema(description = "Errors encountered during the operation, grouped by tag name")
+    private Map<String, String> errors;
+
+    public Map<String, String> getErrors() {
+        return errors;
+    }
+
+    public void setErrors(final Map<String, String> errors) {
+        this.errors = errors;
     }
 
 }

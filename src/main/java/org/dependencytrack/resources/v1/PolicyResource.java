@@ -322,7 +322,10 @@ public class PolicyResource extends AlpineResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Adds a tag to a policy",
-            description = "<p>Requires permission <strong>POLICY_MANAGEMENT</strong></p>"
+            description = """
+                    <p><strong>Deprecated</strong>. Use <code>POST /api/v1/tag/{name}/policy</code> instead.</p>
+                    <p>Requires permission <strong>POLICY_MANAGEMENT</strong></p>
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -335,6 +338,7 @@ public class PolicyResource extends AlpineResource {
             @ApiResponse(responseCode = "404", description = "The policy or tag could not be found")
     })
     @PermissionRequired(Permissions.Constants.POLICY_MANAGEMENT)
+    @Deprecated(forRemoval = true)
     public Response addTagToPolicy(
             @Parameter(description = "The UUID of the policy to add a project to", schema = @Schema(type = "string", format = "uuid"), required = true)
             @PathParam("policyUuid") @ValidUuid String policyUuid,
@@ -350,12 +354,11 @@ public class PolicyResource extends AlpineResource {
             if (tag == null) {
                 return Response.status(Response.Status.NOT_FOUND).entity("The tag could not be found.").build();
             }
-            final List<Tag> tags = policy.getTags();
-            if (tags != null && !tags.contains(tag)) {
-                policy.getTags().add(tag);
-                qm.persist(policy);
+
+            if (qm.bind(policy, List.of(tag))) {
                 return Response.ok(policy).build();
             }
+
             return Response.status(Response.Status.NOT_MODIFIED).build();
         }
     }
@@ -366,7 +369,10 @@ public class PolicyResource extends AlpineResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Removes a tag from a policy",
-            description = "<p>Requires permission <strong>POLICY_MANAGEMENT</strong></p>"
+            description = """
+                    <p><strong>Deprecated</strong>. Use <code>DELETE /api/v1/tag/{name}/policy</code> instead.</p>
+                    <p>Requires permission <strong>POLICY_MANAGEMENT</strong></p>
+                    """
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -379,6 +385,7 @@ public class PolicyResource extends AlpineResource {
             @ApiResponse(responseCode = "404", description = "The policy or tag could not be found")
     })
     @PermissionRequired(Permissions.Constants.POLICY_MANAGEMENT)
+    @Deprecated(forRemoval = true)
     public Response removeTagFromPolicy(
             @Parameter(description = "The UUID of the policy to remove the tag from", schema = @Schema(type = "string", format = "uuid"), required = true)
             @PathParam("policyUuid") @ValidUuid String policyUuid,

@@ -30,8 +30,10 @@ import alpine.persistence.AlpineQueryManager;
 import alpine.persistence.PaginatedResult;
 import alpine.persistence.ScopedCustomization;
 import alpine.resources.AlpineRequest;
+import alpine.server.util.DbUtil;
 import com.github.packageurl.PackageURL;
 import com.google.common.collect.Lists;
+import jakarta.json.JsonObject;
 import org.apache.commons.lang3.ClassUtils;
 import org.datanucleus.PropertyNames;
 import org.datanucleus.api.jdo.JDOQuery;
@@ -83,14 +85,15 @@ import org.dependencytrack.resources.v1.vo.AffectedProject;
 import org.dependencytrack.resources.v1.vo.DependencyGraphResponse;
 import org.dependencytrack.tasks.scanners.AnalyzerIdentity;
 
-import jakarta.json.JsonObject;
 import javax.jdo.FetchPlan;
 import javax.jdo.PersistenceManager;
 import javax.jdo.Query;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +101,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.datanucleus.PropertyNames.PROPERTY_QUERY_SQL_ALLOWALL;
+import static org.dependencytrack.model.ConfigPropertyConstants.ACCESS_MANAGEMENT_ACL_ENABLED;
 
 /**
  * This QueryManager provides a concrete extension of {@link AlpineQueryManager} by
@@ -429,6 +433,10 @@ public class QueryManager extends AlpineQueryManager {
         return getProjectQueryManager().hasAccess(principal, project);
     }
 
+    void preprocessACLs(final Query<?> query, final String inputFilter, final Map<String, Object> params, final boolean bypass) {
+        getProjectQueryManager().preprocessACLs(query, inputFilter, params, bypass);
+    }
+
     public PaginatedResult getProjects(final Tag tag, final boolean includeMetrics, final boolean excludeInactive, final boolean onlyRoot) {
         return getProjectQueryManager().getProjects(tag, includeMetrics, excludeInactive, onlyRoot);
     }
@@ -621,8 +629,16 @@ public class QueryManager extends AlpineQueryManager {
         return getLicenseQueryManager().getLicense(licenseId);
     }
 
+    public License getLicenseByIdOrName(final String licenseIdOrName) {
+        return getLicenseQueryManager().getLicenseByIdOrName(licenseIdOrName);
+    }
+
     public License getCustomLicense(String licenseName) {
         return getLicenseQueryManager().getCustomLicense(licenseName);
+    }
+
+    public License getCustomLicenseByName(final String licenseName) {
+        return getLicenseQueryManager().getCustomLicenseByName(licenseName);
     }
 
     public License synchronizeLicense(License license, boolean commitIndex) {
@@ -1287,6 +1303,10 @@ public class QueryManager extends AlpineQueryManager {
         getProjectQueryManager().bind(project, tags);
     }
 
+    public boolean bind(final Policy policy, final Collection<Tag> tags) {
+        return getPolicyQueryManager().bind(policy, tags);
+    }
+
     /**
      * Commits the Lucene index.
      * @param commitIndex specifies if the search index should be committed (an expensive operation)
@@ -1324,8 +1344,40 @@ public class QueryManager extends AlpineQueryManager {
         return getProjectQueryManager().hasAccessManagementPermission(apiKey);
     }
 
-    public PaginatedResult getTags(String policyUuid) {
-        return getTagQueryManager().getTags(policyUuid);
+    public List<TagQueryManager.TagListRow> getTags() {
+        return getTagQueryManager().getTags();
+    }
+
+    public void deleteTags(final Collection<String> tagNames) {
+        getTagQueryManager().deleteTags(tagNames);
+    }
+
+    public List<TagQueryManager.TaggedProjectRow> getTaggedProjects(final String tagName) {
+        return getTagQueryManager().getTaggedProjects(tagName);
+    }
+
+    public void tagProjects(final String tagName, final Collection<String> projectUuids) {
+        getTagQueryManager().tagProjects(tagName, projectUuids);
+    }
+
+    public void untagProjects(final String tagName, final Collection<String> projectUuids) {
+        getTagQueryManager().untagProjects(tagName, projectUuids);
+    }
+
+    public List<TagQueryManager.TaggedPolicyRow> getTaggedPolicies(final String tagName) {
+        return getTagQueryManager().getTaggedPolicies(tagName);
+    }
+
+    public void tagPolicies(final String tagName, final Collection<String> policyUuids) {
+        getTagQueryManager().tagPolicies(tagName, policyUuids);
+    }
+
+    public void untagPolicies(final String tagName, final Collection<String> policyUuids) {
+        getTagQueryManager().untagPolicies(tagName, policyUuids);
+    }
+
+    public PaginatedResult getTagsForPolicy(String policyUuid) {
+        return getTagQueryManager().getTagsForPolicy(policyUuid);
     }
 
     /**
@@ -1478,4 +1530,72 @@ public class QueryManager extends AlpineQueryManager {
     public List<RepositoryMetaComponent> getRepositoryMetaComponents(final List<RepositoryQueryManager.RepositoryMetaComponentSearch> list) {
         return getRepositoryQueryManager().getRepositoryMetaComponents(list);
     }
+
+    /**
+     * @see #getProjectAclSqlCondition(String)
+     * @since 4.12.0
+     */
+    public Map.Entry<String, Map<String, Object>> getProjectAclSqlCondition() {
+        return getProjectAclSqlCondition("PROJECT");
+    }
+
+    /**
+     * @param projectTableAlias Name or alias of the {@code PROJECT} table to use in the condition.
+     * @return A SQL condition that may be used to check if the {@link #principal} has access to a project
+     * @since 4.12.0
+     */
+    public Map.Entry<String, Map<String, Object>> getProjectAclSqlCondition(final String projectTableAlias) {
+        if (request == null) {
+            return Map.entry(/* true */ "1=1", Collections.emptyMap());
+        }
+
+        if (principal == null || !isEnabled(ACCESS_MANAGEMENT_ACL_ENABLED) || hasAccessManagementPermission(principal)) {
+            return Map.entry(/* true */ "1=1", Collections.emptyMap());
+        }
+
+        final var teamIds = new ArrayList<>(getTeamIds(principal));
+        if (teamIds.isEmpty()) {
+            return Map.entry(/* false */ "1=2", Collections.emptyMap());
+        }
+
+
+        // NB: Need to work around the fact that the RDBMSes can't agree on how to do member checks. Oh joy! :)))
+        final var params = new HashMap<String, Object>();
+        final var teamIdChecks = new ArrayList<String>();
+        for (int i = 0; i < teamIds.size(); i++) {
+            teamIdChecks.add("\"PROJECT_ACCESS_TEAMS\".\"TEAM_ID\" = :teamId" + i);
+            params.put("teamId" + i, teamIds.get(i));
+        }
+
+        return Map.entry("""
+                EXISTS (
+                  SELECT 1
+                    FROM "PROJECT_ACCESS_TEAMS"
+                   WHERE "PROJECT_ACCESS_TEAMS"."PROJECT_ID" = "%s"."ID"
+                     AND (%s)
+                )""".formatted(projectTableAlias, String.join(" OR ", teamIdChecks)), params);
+    }
+
+    /**
+     * @since 4.12.0
+     * @return A SQL {@code OFFSET ... LIMIT ...} clause if pagination is requested, otherwise an empty string
+     */
+    public String getOffsetLimitSqlClause() {
+        if (pagination == null || !pagination.isPaginated()) {
+            return "";
+        }
+
+        final String clauseTemplate;
+        if (DbUtil.isMssql()) {
+            clauseTemplate = "OFFSET %d ROWS FETCH NEXT %d ROWS ONLY";
+        } else if (DbUtil.isMysql()) {
+            // NB: Order of limit and offset is different for MySQL...
+            return "LIMIT %s OFFSET %s".formatted(pagination.getLimit(), pagination.getOffset());
+        } else {
+            clauseTemplate = "OFFSET %d FETCH NEXT %d ROWS ONLY";
+        }
+
+        return clauseTemplate.formatted(pagination.getOffset(), pagination.getLimit());
+    }
+
 }

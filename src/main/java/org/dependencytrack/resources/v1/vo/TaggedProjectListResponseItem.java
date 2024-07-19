@@ -16,28 +16,20 @@
  * SPDX-License-Identifier: Apache-2.0
  * Copyright (c) OWASP Foundation. All Rights Reserved.
  */
-package org.dependencytrack.resources.v1.exception;
+package org.dependencytrack.resources.v1.vo;
 
-import alpine.persistence.NotSortableException;
-import org.dependencytrack.resources.v1.problems.ProblemDetails;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.Parameter;
 
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.ext.ExceptionMapper;
-import jakarta.ws.rs.ext.Provider;
+import java.util.UUID;
 
 /**
  * @since 4.12.0
  */
-@Provider
-public class NotSortableExceptionMapper implements ExceptionMapper<NotSortableException> {
-
-    @Override
-    public Response toResponse(final NotSortableException exception) {
-        final var problemDetails = new ProblemDetails();
-        problemDetails.setStatus(400);
-        problemDetails.setTitle("Field not sortable");
-        problemDetails.setDetail(exception.getMessage());
-        return problemDetails.toResponse();
-    }
-
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record TaggedProjectListResponseItem(
+        @Parameter(description = "UUID of the project", required = true) UUID uuid,
+        @Parameter(description = "Name of the project", required = true) String name,
+        @Parameter(description = "Version of the project") String version
+) {
 }
